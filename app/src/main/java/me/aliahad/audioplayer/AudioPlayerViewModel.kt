@@ -52,6 +52,9 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val applicationContext = application.applicationContext
     private val preferences = PlayerPreferences(applicationContext)
+    private val playerManager = AudioPlayerManager.getInstance(applicationContext)
+    private val player: ExoPlayer = playerManager.player
+    private val mediaSession = playerManager.mediaSession
     private var progressJob: Job? = null
 
     init {
@@ -82,9 +85,11 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { state -> state.copy(isPlaying = isPlaying) }
             if (isPlaying) {
                 startProgressUpdates()
+                AudioPlayerService.startService(applicationContext)
             } else {
                 stopProgressUpdates()
                 persistCurrentState()
+                AudioPlayerService.stopService(applicationContext)
             }
         }
 
@@ -111,11 +116,13 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private val player: ExoPlayer = ExoPlayer.Builder(applicationContext)
-        .build()
-        .also { exoPlayer ->
-            exoPlayer.addListener(playerListener)
-        }
+    init {
+        player.addListener(playerListener)
+    }
+
+    init {
+        player.addListener(playerListener)
+    }
 
     fun onFolderSelected(folderUri: Uri) {
         viewModelScope.launch {
@@ -138,6 +145,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                 }
                 preferences.clear()
+                AudioPlayerService.stopService(applicationContext)
                 return@launch
             } else {
                 val startIndex = 0
@@ -191,6 +199,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { state -> state.copy(isPlaying = false) }
         stopProgressUpdates()
         persistSelection(index, resetPosition = true)
+        AudioPlayerService.stopService(applicationContext)
     }
 
     fun selectTrack(index: Int, playImmediately: Boolean = true) {
@@ -295,7 +304,6 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         player.removeListener(playerListener)
         stopProgressUpdates()
         persistCurrentState()
-        player.release()
     }
 
     private suspend fun loadTracks(folderUri: Uri): List<AudioTrack> = withContext(Dispatchers.IO) {
@@ -403,6 +411,11 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(track.title)
+                        .apply {
+                            track.artist?.let { setArtist(it) }
+                            track.album?.let { setAlbumTitle(it) }
+                            track.durationMs?.let { setDurationMs(it) }
+                        }
                         .build()
                 )
                 .build()
@@ -433,6 +446,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun clearPlaylist() {
         player.stop()
         player.clearMediaItems()
+        AudioPlayerService.stopService(applicationContext)
     }
 
     private fun startPlayback() {
@@ -442,6 +456,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         player.play()
         _uiState.update { state -> state.copy(isPlaying = true, currentTrackIndex = currentIndex()) }
         startProgressUpdates()
+        AudioPlayerService.startService(applicationContext)
     }
 
     private fun currentIndex(): Int =
