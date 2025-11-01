@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -431,22 +432,29 @@ private fun PlaylistSection(
                 PlaylistEmptyState(onChooseFolder = onChooseFolder)
             }
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = true),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                itemsIndexed(tracks) { index, track ->
-                    PlaylistItem(
-                        index = index,
-                        track = track,
-                        isCurrent = index == currentTrackIndex,
-                        isPlaying = isPlaying && index == currentTrackIndex,
-                        onSelect = { onSelectTrack(index) }
-                    )
-                }
-            }
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(currentTrackIndex) {
+                        if (currentTrackIndex in tracks.indices) {
+                            listState.animateScrollToItem(currentTrackIndex)
+                        }
+                    }
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = true),
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        itemsIndexed(tracks) { index, track ->
+                            PlaylistItem(
+                                index = index,
+                                track = track,
+                                isCurrent = index == currentTrackIndex,
+                                isPlaying = isPlaying && index == currentTrackIndex,
+                                onSelect = { onSelectTrack(index) }
+                            )
+                        }
+                    }
         }
     }
 }
