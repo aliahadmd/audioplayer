@@ -2,6 +2,7 @@ package me.aliahad.audioplayer
 
 import android.app.Application
 import android.net.Uri
+import android.media.MediaMetadataRetriever
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,7 +26,11 @@ import kotlin.math.max
 
 data class AudioTrack(
     val title: String,
-    val uri: Uri
+    val uri: Uri,
+    val artist: String? = null,
+    val album: String? = null,
+    val durationMs: Long? = null,
+    val fileSizeBytes: Long? = null
 )
 
 data class PlayerUiState(
@@ -319,11 +324,46 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
             when {
                 file.isDirectory -> collectAudioFiles(file, collection)
                 file.isFile && isAudioFile(file) -> {
-                    val title = file.name ?: "Unknown"
-                    collection += AudioTrack(title = title, uri = file.uri)
+                    collection += buildAudioTrack(file)
                 }
             }
         }
+    }
+
+    private fun buildAudioTrack(file: DocumentFile): AudioTrack {
+        val defaultTitle = file.name ?: "Unknown"
+        val metadataRetriever = MediaMetadataRetriever()
+        var artist: String? = null
+        var album: String? = null
+        var durationMs: Long? = null
+        var title: String? = null
+
+        runCatching {
+            metadataRetriever.setDataSource(applicationContext, file.uri)
+            title = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            artist = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            album = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            durationMs = metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+        }.onFailure {
+            // Ignore metadata failures; fall back to file information.
+        }.also {
+            runCatching { metadataRetriever.release() }
+        }
+
+        val cleanTitle = title?.takeIf { it.isNotBlank() } ?: defaultTitle
+        val cleanArtist = artist?.takeIf { it.isNotBlank() }
+        val cleanAlbum = album?.takeIf { it.isNotBlank() }
+        val fileSize = file.length().takeIf { it >= 0 }
+
+        return AudioTrack(
+            title = cleanTitle,
+            uri = file.uri,
+            artist = cleanArtist,
+            album = cleanAlbum,
+            durationMs = durationMs,
+            fileSizeBytes = fileSize
+        )
     }
 
     private fun isAudioFile(file: DocumentFile): Boolean {

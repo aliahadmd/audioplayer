@@ -46,22 +46,27 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -193,13 +198,25 @@ fun AudioPlayerScreen(
                     )
                 }
 
+                var showDetails by rememberSaveable { mutableStateOf(false) }
+
+                if (showDetails && currentTrack != null) {
+                    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                    TrackDetailsSheet(
+                        track = currentTrack,
+                        sheetState = sheetState,
+                        onDismiss = { showDetails = false }
+                    )
+                }
+
                 NowPlayingCard(
                     currentTrack = currentTrack,
                     isPlaying = uiState.isPlaying,
                     isLoading = uiState.isLoading,
                     folderUri = uiState.folderUri,
                     errorMessage = uiState.errorMessage,
-                    onChooseFolder = onChooseFolder
+                    onChooseFolder = onChooseFolder,
+                    onShowDetails = { if (currentTrack != null) showDetails = true }
                 )
 
                 PlaylistSection(
@@ -241,7 +258,8 @@ private fun NowPlayingCard(
     isLoading: Boolean,
     folderUri: Uri?,
     errorMessage: String?,
-    onChooseFolder: () -> Unit
+    onChooseFolder: () -> Unit,
+    onShowDetails: () -> Unit
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -309,31 +327,14 @@ private fun NowPlayingCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (folderUri != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.FolderOpen,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = folderUri.lastPathSegment ?: folderUri.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
+                TextButton(onClick = onShowDetails, enabled = currentTrack != null) {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Details")
                 }
                 TextButton(onClick = onChooseFolder) {
                     Icon(
@@ -342,7 +343,7 @@ private fun NowPlayingCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = if (folderUri == null) "Choose folder" else "Change")
+                    Text(text = if (folderUri == null) "Choose folder" else "Change folder")
                 }
             }
 
@@ -723,6 +724,65 @@ private fun PlaybackControls(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackDetailsSheet(
+    track: AudioTrack,
+    sheetState: SheetState,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Track details",
+                style = MaterialTheme.typography.titleLarge
+            )
+            DetailRow(label = "Title", value = track.title)
+            track.artist?.let { artist ->
+                DetailRow(label = "Artist", value = artist)
+            }
+            track.album?.let { album ->
+                DetailRow(label = "Album", value = album)
+            }
+            track.durationMs?.let { duration ->
+                DetailRow(label = "Duration", value = formatTime(duration))
+            }
+            track.fileSizeBytes?.let { size ->
+                formatFileSize(size)?.let { readable ->
+                    DetailRow(label = "File size", value = readable)
+                }
+            }
+            DetailRow(label = "Source", value = track.uri.toString())
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+    }
+}
+
 private fun formatTime(positionMs: Long): String {
     if (positionMs <= 0L) return "0:00"
     val totalSeconds = positionMs / 1000
@@ -736,6 +796,18 @@ private fun formatTime(positionMs: Long): String {
     }
 }
 
+private fun formatFileSize(sizeBytes: Long): String? {
+    if (sizeBytes <= 0L) return null
+    val units = listOf("B", "KB", "MB", "GB", "TB")
+    var value = sizeBytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024 && unitIndex < units.lastIndex) {
+        value /= 1024
+        unitIndex++
+    }
+    return String.format(Locale.getDefault(), "%.1f %s", value, units[unitIndex])
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun AudioPlayerScreenPreview() {
@@ -744,9 +816,30 @@ private fun AudioPlayerScreenPreview() {
             uiState = PlayerUiState(
                 folderUri = Uri.parse("content://demo/music"),
                 tracks = listOf(
-                    AudioTrack("Lo-fi Vibes", Uri.parse("content://demo/lofi")),
-                    AudioTrack("Ocean Echoes", Uri.parse("content://demo/ocean")),
-                    AudioTrack("Night Walk", Uri.parse("content://demo/night"))
+                    AudioTrack(
+                        title = "Lo-fi Vibes",
+                        uri = Uri.parse("content://demo/lofi"),
+                        artist = "Loft Beats",
+                        album = "Late Night",
+                        durationMs = 180_000L,
+                        fileSizeBytes = 4_200_000L
+                    ),
+                    AudioTrack(
+                        title = "Ocean Echoes",
+                        uri = Uri.parse("content://demo/ocean"),
+                        artist = "Tide",
+                        album = "Blue",
+                        durationMs = 200_000L,
+                        fileSizeBytes = 4_600_000L
+                    ),
+                    AudioTrack(
+                        title = "Night Walk",
+                        uri = Uri.parse("content://demo/night"),
+                        artist = "City Lights",
+                        album = "Midnight",
+                        durationMs = 220_000L,
+                        fileSizeBytes = 5_000_000L
+                    )
                 ),
                 currentTrackIndex = 1,
                 isPlaying = true,
