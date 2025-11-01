@@ -33,24 +33,36 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFloatingActionButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,7 +75,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
 import me.aliahad.audioplayer.ui.theme.AudioplayerTheme
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -100,7 +114,11 @@ class MainActivity : ComponentActivity() {
                     onNext = { viewModel.playNext() },
                     onPrevious = { viewModel.playPrevious() },
                     onStop = { viewModel.stopPlayback() },
-                    onSelectTrack = { index -> viewModel.selectTrack(index) }
+                    onSelectTrack = { index -> viewModel.selectTrack(index) },
+                    onSeekTo = { position -> viewModel.seekTo(position) },
+                    onToggleShuffle = { viewModel.toggleShuffle() },
+                    onCycleRepeatMode = { viewModel.cycleRepeatMode() },
+                    onCyclePlaybackSpeed = { viewModel.cyclePlaybackSpeed() }
                 )
             }
         }
@@ -117,6 +135,10 @@ fun AudioPlayerScreen(
     onPrevious: () -> Unit,
     onStop: () -> Unit,
     onSelectTrack: (Int) -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackSpeed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentTrack = uiState.tracks.getOrNull(uiState.currentTrackIndex)
@@ -192,10 +214,20 @@ fun AudioPlayerScreen(
                 PlaybackControls(
                     isPlaying = uiState.isPlaying,
                     hasTracks = hasTracks,
+                    currentPosition = uiState.currentPosition,
+                    bufferedPosition = uiState.bufferedPosition,
+                    duration = uiState.duration,
+                    isShuffleEnabled = uiState.isShuffleEnabled,
+                    repeatMode = uiState.repeatMode,
+                    playbackSpeed = uiState.playbackSpeed,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     onPrevious = onPrevious,
-                    onStop = onStop
+                    onStop = onStop,
+                    onSeekTo = onSeekTo,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeatMode = onCycleRepeatMode,
+                    onCyclePlaybackSpeed = onCyclePlaybackSpeed
                 )
             }
         }
@@ -213,21 +245,21 @@ private fun NowPlayingCard(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(56.dp)
                         .clip(CircleShape)
                         .background(
                             brush = Brush.linearGradient(
@@ -243,18 +275,18 @@ private fun NowPlayingCard(
                         imageVector = Icons.Rounded.MusicNote,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = currentTrack?.title ?: "Select a folder to start",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
@@ -264,61 +296,66 @@ private fun NowPlayingCard(
                             isPlaying -> "Now playing"
                             else -> "Ready to play"
                         },
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            if (folderUri != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(32.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (folderUri != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FolderOpen,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = folderUri.lastPathSegment ?: folderUri.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.FolderOpen,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = folderUri.lastPathSegment ?: folderUri.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
-            }
-
-            FilledTonalButton(onClick = onChooseFolder) {
-                Icon(
-                    imageVector = Icons.Rounded.FolderOpen,
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = if (folderUri == null) "Choose music folder" else "Change folder")
+                TextButton(onClick = onChooseFolder) {
+                    Icon(
+                        imageVector = Icons.Rounded.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = if (folderUri == null) "Choose folder" else "Change")
+                }
             }
 
             if (errorMessage != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
                         text = errorMessage,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -522,52 +559,180 @@ private fun PlaylistEmptyState(onChooseFolder: () -> Unit) {
 private fun PlaybackControls(
     isPlaying: Boolean,
     hasTracks: Boolean,
+    currentPosition: Long,
+    bufferedPosition: Long,
+    duration: Long,
+    isShuffleEnabled: Boolean,
+    repeatMode: Int,
+    playbackSpeed: Float,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackSpeed: () -> Unit
 ) {
+    val safeDuration = duration.takeIf { it > 0L } ?: 0L
+    val sliderRange = if (safeDuration > 0L) safeDuration.toFloat() else 1f
+    var sliderPosition by remember(safeDuration, hasTracks) {
+        mutableStateOf(currentPosition.coerceIn(0L, safeDuration).toFloat())
+    }
+    var isScrubbing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentPosition, safeDuration, hasTracks) {
+        if (!isScrubbing) {
+            sliderPosition = currentPosition.coerceIn(0L, safeDuration).toFloat()
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        LargeFloatingActionButton(
-            onClick = {
-                if (hasTracks) onPlayPause()
+        Slider(
+            value = sliderPosition,
+            onValueChange = { value ->
+                if (hasTracks && safeDuration > 0L) {
+                    isScrubbing = true
+                    sliderPosition = value.coerceIn(0f, sliderRange)
+                }
             },
-            containerColor = if (hasTracks) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
+            onValueChangeFinished = {
+                isScrubbing = false
+                if (hasTracks && safeDuration > 0L) {
+                    onSeekTo(sliderPosition.toLong())
+                }
             },
-            contentColor = if (hasTracks) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.alpha(if (hasTracks) 1f else 0.5f)
+            enabled = hasTracks,
+            valueRange = 0f..sliderRange,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                modifier = Modifier.size(36.dp)
+            Text(
+                text = formatTime(sliderPosition.toLong()),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = if (safeDuration > 0L) formatTime(safeDuration) else "--:--",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilledTonalIconButton(onClick = onPrevious, enabled = hasTracks) {
-                Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = "Previous")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val shuffleColors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isShuffleEnabled) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (isShuffleEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                FilledTonalIconButton(
+                    onClick = onToggleShuffle,
+                    enabled = hasTracks,
+                    colors = shuffleColors
+                ) {
+                    Icon(imageVector = Icons.Rounded.Shuffle, contentDescription = "Toggle shuffle")
+                }
+
+                val repeatSelected = repeatMode != Player.REPEAT_MODE_OFF
+                val repeatColors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (repeatSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (repeatSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                val repeatIcon = when (repeatMode) {
+                    Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
+                    else -> Icons.Rounded.Repeat
+                }
+                FilledTonalIconButton(
+                    onClick = onCycleRepeatMode,
+                    enabled = hasTracks,
+                    colors = repeatColors
+                ) {
+                    Icon(imageVector = repeatIcon, contentDescription = "Cycle repeat mode")
+                }
+
+                val speedLabel = String.format(Locale.getDefault(), "%.1fx", playbackSpeed)
+                TextButton(onClick = onCyclePlaybackSpeed, enabled = hasTracks) {
+                    Icon(
+                        imageVector = Icons.Rounded.Speed,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = speedLabel)
+                }
             }
-            FilledTonalIconButton(onClick = onStop, enabled = hasTracks) {
-                Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
-            }
-            FilledTonalIconButton(onClick = onNext, enabled = hasTracks) {
-                Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = "Next")
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(onClick = onPrevious, enabled = hasTracks) {
+                    Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = "Previous")
+                }
+                FilledIconButton(
+                    onClick = { if (hasTracks) onPlayPause() },
+                    enabled = hasTracks,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play"
+                    )
+                }
+                FilledTonalIconButton(onClick = onNext, enabled = hasTracks) {
+                    Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = "Next")
+                }
+                FilledTonalIconButton(onClick = onStop, enabled = hasTracks) {
+                    Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
+                }
             }
         }
+    }
+}
+
+private fun formatTime(positionMs: Long): String {
+    if (positionMs <= 0L) return "0:00"
+    val totalSeconds = positionMs / 1000
+    val seconds = (totalSeconds % 60).toInt()
+    val minutes = ((totalSeconds / 60) % 60).toInt()
+    val hours = (totalSeconds / 3600).toInt()
+    return if (hours > 0) {
+        String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.getDefault(), "%d:%02d", totalSeconds / 60, seconds)
     }
 }
 
@@ -584,14 +749,24 @@ private fun AudioPlayerScreenPreview() {
                     AudioTrack("Night Walk", Uri.parse("content://demo/night"))
                 ),
                 currentTrackIndex = 1,
-                isPlaying = true
+                isPlaying = true,
+                currentPosition = 90_000L,
+                bufferedPosition = 120_000L,
+                duration = 240_000L,
+                isShuffleEnabled = true,
+                repeatMode = Player.REPEAT_MODE_ALL,
+                playbackSpeed = 1.25f
             ),
             onChooseFolder = {},
             onPlayPause = {},
             onNext = {},
             onPrevious = {},
             onStop = {},
-            onSelectTrack = {}
+            onSelectTrack = {},
+            onSeekTo = {},
+            onToggleShuffle = {},
+            onCycleRepeatMode = {},
+            onCyclePlaybackSpeed = {}
         )
     }
 }
