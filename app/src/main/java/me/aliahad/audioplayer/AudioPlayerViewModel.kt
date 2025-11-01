@@ -35,15 +35,29 @@ data class PlayerUiState(
 class AudioPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val applicationContext = application.applicationContext
+    private val preferences = PlayerPreferences(applicationContext)
+
+    init {
+        viewModelScope.launch {
+            val savedPreferences = runCatching { preferences.getPreferences() }.getOrNull()
+                ?: return@launch
+            val folderUriString = savedPreferences.folderUri ?: return@launch
+            val folderUri = runCatching { Uri.parse(folderUriString) }.getOrNull()
+                ?: return@launch
+            restorePlaylist(folderUri, savedPreferences.currentTrackUri)
+        }
+    }
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private val playerListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            val newIndex = currentIndex()
             _uiState.update { state ->
-                state.copy(currentTrackIndex = currentIndex())
+                state.copy(currentTrackIndex = newIndex)
             }
+            persistSelection(newIndex)
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -83,8 +97,12 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         errorMessage = "No audio files found in selected folder."
                     )
                 }
+                preferences.clear()
+                return@launch
             } else {
-                setPlaylist(folderUri, tracks)
+                val startIndex = 0
+                setPlaylist(folderUri, tracks, startIndex = startIndex)
+                persistFolderAndTrack(folderUri, tracks[startIndex])
             }
         }
     }
@@ -125,11 +143,13 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun stopPlayback() {
+        val index = currentIndex()
         player.pause()
-        if (player.mediaItemCount > 0 && currentIndex() >= 0) {
-            player.seekTo(currentIndex(), 0L)
+        if (player.mediaItemCount > 0 && index >= 0) {
+            player.seekTo(index, 0L)
         }
         _uiState.update { state -> state.copy(isPlaying = false) }
+        persistSelection(index)
     }
 
     fun selectTrack(index: Int, playImmediately: Boolean = true) {
@@ -137,9 +157,43 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         player.seekTo(index, 0L)
         _uiState.update { state -> state.copy(currentTrackIndex = index) }
+        persistSelection(index)
         if (playImmediately) {
             startPlayback()
         }
+    }
+
+    private suspend fun restorePlaylist(folderUri: Uri, currentTrackUriString: String?) {
+        _uiState.update { state ->
+            state.copy(isLoading = true, errorMessage = null)
+        }
+
+        val tracks = loadTracks(folderUri)
+
+        if (tracks.isEmpty()) {
+            clearPlaylist()
+            preferences.clear()
+            _uiState.update { state ->
+                state.copy(
+                    folderUri = folderUri,
+                    tracks = emptyList(),
+                    currentTrackIndex = -1,
+                    isPlaying = false,
+                    isLoading = false,
+                    errorMessage = "We couldn't find audio in the saved folder. Please choose another folder."
+                )
+            }
+            return
+        }
+
+        val targetIndex = currentTrackUriString
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?.let { storedUri -> tracks.indexOfFirst { it.uri == storedUri } }
+            ?.takeIf { it >= 0 }
+            ?: 0
+
+        setPlaylist(folderUri, tracks, startIndex = targetIndex)
+        persistFolderAndTrack(folderUri, tracks.getOrNull(targetIndex))
     }
 
     override fun onCleared() {
@@ -149,19 +203,28 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private suspend fun loadTracks(folderUri: Uri): List<AudioTrack> = withContext(Dispatchers.IO) {
-        val documentFile = DocumentFile.fromTreeUri(applicationContext, folderUri)
-        if (documentFile == null || !documentFile.isDirectory) {
-            return@withContext emptyList()
-        }
+        try {
+            val documentFile = DocumentFile.fromTreeUri(applicationContext, folderUri)
+            if (documentFile == null || !documentFile.isDirectory) {
+                return@withContext emptyList()
+            }
 
-        val collection = mutableListOf<AudioTrack>()
-        collectAudioFiles(documentFile, collection)
-        collection.sortBy { it.title.lowercase(Locale.ROOT) }
-        collection
+            val collection = mutableListOf<AudioTrack>()
+            collectAudioFiles(documentFile, collection)
+            collection.sortBy { it.title.lowercase(Locale.ROOT) }
+            collection
+        } catch (_: SecurityException) {
+            emptyList()
+        }
     }
 
     private fun collectAudioFiles(folder: DocumentFile, collection: MutableList<AudioTrack>) {
-        folder.listFiles().forEach { file ->
+        val children = try {
+            folder.listFiles()
+        } catch (_: SecurityException) {
+            return
+        }
+        children.forEach { file ->
             when {
                 file.isDirectory -> collectAudioFiles(file, collection)
                 file.isFile && isAudioFile(file) -> {
@@ -182,9 +245,23 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         return extension in SUPPORTED_AUDIO_EXTENSIONS
     }
 
-    private fun setPlaylist(folderUri: Uri, tracks: List<AudioTrack>) {
+    private fun setPlaylist(folderUri: Uri, tracks: List<AudioTrack>, startIndex: Int = 0) {
         player.stop()
         player.clearMediaItems()
+
+        if (tracks.isEmpty()) {
+            _uiState.update { state ->
+                state.copy(
+                    folderUri = folderUri,
+                    tracks = emptyList(),
+                    currentTrackIndex = -1,
+                    isPlaying = false,
+                    isLoading = false,
+                    errorMessage = null
+                )
+            }
+            return
+        }
 
         val mediaItems = tracks.map { track ->
             MediaItem.Builder()
@@ -197,14 +274,15 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 .build()
         }
 
-        player.setMediaItems(mediaItems, /* startIndex = */ 0, /* startPositionMs = */ 0L)
+        val effectiveIndex = startIndex.coerceIn(0, tracks.lastIndex)
+        player.setMediaItems(mediaItems, effectiveIndex, 0L)
         player.prepare()
 
         _uiState.update { state ->
             state.copy(
                 folderUri = folderUri,
                 tracks = tracks,
-                currentTrackIndex = if (tracks.isNotEmpty()) 0 else -1,
+                currentTrackIndex = effectiveIndex,
                 isPlaying = false,
                 isLoading = false,
                 errorMessage = null
@@ -215,6 +293,20 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun clearPlaylist() {
         player.stop()
         player.clearMediaItems()
+    }
+
+    private fun persistSelection(index: Int) {
+        if (index < 0) return
+        val folderUri = _uiState.value.folderUri ?: return
+        val track = _uiState.value.tracks.getOrNull(index)
+        persistFolderAndTrack(folderUri, track)
+    }
+
+    private fun persistFolderAndTrack(folderUri: Uri?, track: AudioTrack?) {
+        viewModelScope.launch {
+            preferences.setFolderUri(folderUri)
+            preferences.setCurrentTrackUri(track?.uri)
+        }
     }
 
     private fun startPlayback() {
