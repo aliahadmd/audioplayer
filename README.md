@@ -25,14 +25,4 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 - DataStore (for preferences)
 - Android 12+ compatible (min SDK 31)
 
-## Getting Started
-1. Clone the project and open it in Android Studio Ladybug or newer.
-2. Sync Gradle; no extra setup required.
-3. Run on a device (min Android 12). First launch will ask for notification permission so the background player can show media controls.
 
-## Roadmap / Ideas
-- Download album artwork for displaying in the detail sheet and notification.
-- Add a mini player widget for quick access from the home screen.
-- Explore Equalizer & sleep timer options.
-
-If you’d like to customize or extend this app for your own needs, feel free to reach out—always open to ideas and improvements.
