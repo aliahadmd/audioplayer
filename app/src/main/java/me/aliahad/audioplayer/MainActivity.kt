@@ -78,12 +78,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import me.aliahad.audioplayer.ui.theme.AudioplayerTheme
 import java.util.Locale
 
@@ -277,6 +279,7 @@ private fun NowPlayingCard(
     onChooseFolder: () -> Unit,
     onShowDetails: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp)
@@ -343,7 +346,10 @@ private fun NowPlayingCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onShowDetails, enabled = currentTrack != null) {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onShowDetails()
+                }, enabled = currentTrack != null) {
                     Icon(
                         imageVector = Icons.Rounded.MusicNote,
                         contentDescription = null,
@@ -352,7 +358,10 @@ private fun NowPlayingCard(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(text = "Details")
                 }
-                TextButton(onClick = onChooseFolder) {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onChooseFolder()
+                }) {
                     Icon(
                         imageVector = Icons.Rounded.FolderOpen,
                         contentDescription = null,
@@ -450,6 +459,7 @@ private fun PlaylistItem(
     isPlaying: Boolean,
     onSelect: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val cardColor = if (isCurrent) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -467,7 +477,10 @@ private fun PlaylistItem(
         color = cardColor,
         tonalElevation = if (isCurrent) 6.dp else 2.dp,
         shadowElevation = if (isCurrent) 6.dp else 0.dp,
-        onClick = onSelect
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onSelect()
+        }
     ) {
         Row(
             modifier = Modifier
@@ -537,6 +550,7 @@ private fun PlaylistItem(
 
 @Composable
 private fun PlaylistEmptyState(onChooseFolder: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -565,7 +579,10 @@ private fun PlaylistEmptyState(onChooseFolder: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            FilledTonalButton(onClick = onChooseFolder) {
+            FilledTonalButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onChooseFolder()
+            }) {
                 Text(text = "Browse folders")
             }
         }
@@ -591,6 +608,7 @@ private fun PlaybackControls(
     onCycleRepeatMode: () -> Unit,
     onCyclePlaybackSpeed: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val safeDuration = duration.takeIf { it > 0L } ?: 0L
     val sliderRange = if (safeDuration > 0L) safeDuration.toFloat() else 1f
     var sliderPosition by remember(safeDuration, hasTracks) {
@@ -613,6 +631,9 @@ private fun PlaybackControls(
             value = sliderPosition,
             onValueChange = { value ->
                 if (hasTracks && safeDuration > 0L) {
+                    if (!isScrubbing) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
                     isScrubbing = true
                     sliderPosition = value.coerceIn(0f, sliderRange)
                 }
@@ -620,6 +641,7 @@ private fun PlaybackControls(
             onValueChangeFinished = {
                 isScrubbing = false
                 if (hasTracks && safeDuration > 0L) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onSeekTo(sliderPosition.toLong())
                 }
             },
@@ -666,7 +688,12 @@ private fun PlaybackControls(
                     }
                 )
                 FilledTonalIconButton(
-                    onClick = onToggleShuffle,
+                    onClick = {
+                        if (hasTracks) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleShuffle()
+                        }
+                    },
                     enabled = hasTracks,
                     colors = shuffleColors
                 ) {
@@ -691,7 +718,12 @@ private fun PlaybackControls(
                     else -> Icons.Rounded.Repeat
                 }
                 FilledTonalIconButton(
-                    onClick = onCycleRepeatMode,
+                    onClick = {
+                        if (hasTracks) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onCycleRepeatMode()
+                        }
+                    },
                     enabled = hasTracks,
                     colors = repeatColors
                 ) {
@@ -699,7 +731,12 @@ private fun PlaybackControls(
                 }
 
                 val speedLabel = String.format(Locale.getDefault(), "%.1fx", playbackSpeed)
-                TextButton(onClick = onCyclePlaybackSpeed, enabled = hasTracks) {
+                TextButton(onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCyclePlaybackSpeed()
+                    }
+                }, enabled = hasTracks) {
                     Icon(
                         imageVector = Icons.Rounded.Speed,
                         contentDescription = null,
@@ -711,11 +748,21 @@ private fun PlaybackControls(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalIconButton(onClick = onPrevious, enabled = hasTracks) {
+                FilledTonalIconButton(onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPrevious()
+                    }
+                }, enabled = hasTracks) {
                     Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = "Previous")
                 }
                 FilledIconButton(
-                    onClick = { if (hasTracks) onPlayPause() },
+                    onClick = {
+                        if (hasTracks) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onPlayPause()
+                        }
+                    },
                     enabled = hasTracks,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -729,10 +776,20 @@ private fun PlaybackControls(
                         contentDescription = if (isPlaying) "Pause" else "Play"
                     )
                 }
-                FilledTonalIconButton(onClick = onNext, enabled = hasTracks) {
+                FilledTonalIconButton(onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onNext()
+                    }
+                }, enabled = hasTracks) {
                     Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = "Next")
                 }
-                FilledTonalIconButton(onClick = onStop, enabled = hasTracks) {
+                FilledTonalIconButton(onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onStop()
+                    }
+                }, enabled = hasTracks) {
                     Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
                 }
             }
