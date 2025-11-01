@@ -10,12 +10,21 @@ android {
         version = release(36)
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../keystore/release.jks")
+            storePassword = "audioplayerReleasePass"
+            keyAlias = "audioplayerReleaseKey"
+            keyPassword = "audioplayerReleasePass"
+        }
+    }
+
     defaultConfig {
         applicationId = "me.aliahad.audioplayer"
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -23,10 +32,14 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

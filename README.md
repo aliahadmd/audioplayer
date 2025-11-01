@@ -10,7 +10,14 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 - **Dynamic scroll** – the active song always stays in view; the playlist auto-scrolls whenever I move to the next or previous track.
 
 ## Screenshots
-> Add screenshots from your device here once you’ve captured them.
+
+|  | |  |
+| --- | --- | --- |
+| ![Now playing screen](screenshot/1.jpg) | ![Next track kept in view](screenshot/2.jpg) | ![Track details modal](screenshot/3.jpg) |
+
+|  | |
+| --- | --- |
+| ![Notification & lockscreen controls](screenshot/4.jpg) | ![Folder selection flow](screenshot/5.jpg) |
 
 ## Tech Stack
 - Kotlin + Jetpack Compose
