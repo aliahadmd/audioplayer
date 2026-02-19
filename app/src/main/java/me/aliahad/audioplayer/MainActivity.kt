@@ -48,7 +48,12 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
@@ -931,48 +936,86 @@ private fun TimestampListSection(
     onSeekToTimestamp: (Long) -> Unit,
     onDeleteTimestamp: (Long) -> Unit
 ) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = "Bookmarks",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        timestamps.forEach { bookmark ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    isExpanded = !isExpanded
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = formatTimestamp(bookmark.positionMs),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onSeekToTimestamp(bookmark.positionMs) }
+                    text = "Bookmarks",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                if (bookmark.note != null) {
-                    Text(
-                        text = bookmark.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-                IconButton(onClick = { onDeleteTimestamp(bookmark.id) }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Delete,
-                        contentDescription = "Delete bookmark",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Text(
+                    text = "${timestamps.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = if (isExpanded) "Collapse bookmarks" else "Expand bookmarks",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                timestamps.forEach { bookmark ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = formatTimestamp(bookmark.positionMs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onSeekToTimestamp(bookmark.positionMs) }
+                        )
+                        if (bookmark.note != null) {
+                            Text(
+                                text = bookmark.note,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                        IconButton(onClick = { onDeleteTimestamp(bookmark.id) }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "Delete bookmark",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
