@@ -22,7 +22,8 @@ data class PlayerPreferencesData(
     val positionMs: Long = 0L,
     val shuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val playbackSpeed: Float = 1f
+    val playbackSpeed: Float = 1f,
+    val isNightMode: Boolean = true
 )
 
 class PlayerPreferences(context: Context) {
@@ -36,7 +37,8 @@ class PlayerPreferences(context: Context) {
             positionMs = preferences[POSITION_MS_KEY] ?: 0L,
             shuffleEnabled = preferences[SHUFFLE_ENABLED_KEY] ?: false,
             repeatMode = preferences[REPEAT_MODE_KEY] ?: Player.REPEAT_MODE_OFF,
-            playbackSpeed = preferences[PLAYBACK_SPEED_KEY] ?: 1f
+            playbackSpeed = preferences[PLAYBACK_SPEED_KEY] ?: 1f,
+            isNightMode = preferences[IS_NIGHT_MODE_KEY] ?: true
         )
     }
 
@@ -72,6 +74,12 @@ class PlayerPreferences(context: Context) {
         dataStore.edit { it.clear() }
     }
 
+    suspend fun saveThemeMode(isNightMode: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[IS_NIGHT_MODE_KEY] = isNightMode
+        }
+    }
+
     private companion object {
         val FOLDER_URI_KEY = stringPreferencesKey("folder_uri")
         val CURRENT_TRACK_URI_KEY = stringPreferencesKey("current_track_uri")
@@ -79,5 +87,6 @@ class PlayerPreferences(context: Context) {
         val SHUFFLE_ENABLED_KEY = booleanPreferencesKey("shuffle_enabled")
         val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
         val PLAYBACK_SPEED_KEY = floatPreferencesKey("playback_speed")
+        val IS_NIGHT_MODE_KEY = booleanPreferencesKey("is_night_mode")
     }
 }

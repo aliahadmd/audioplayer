@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -31,6 +32,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -43,7 +46,10 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +60,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -62,6 +69,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -99,8 +107,30 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
         setContent {
-            AudioplayerTheme {
-                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+            val activity = this@MainActivity
+            LaunchedEffect(uiState.isNightMode) {
+                if (uiState.isNightMode) {
+                    activity.enableEdgeToEdge(
+                        statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                        navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    )
+                } else {
+                    activity.enableEdgeToEdge(
+                        statusBarStyle = SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        ),
+                        navigationBarStyle = SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    )
+                }
+            }
+
+            AudioplayerTheme(isNightMode = uiState.isNightMode) {
                 val context = LocalContext.current
                 val folderPicker = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocumentTree()
@@ -130,7 +160,13 @@ class MainActivity : ComponentActivity() {
                     onSeekTo = { position -> viewModel.seekTo(position) },
                     onToggleShuffle = { viewModel.toggleShuffle() },
                     onCycleRepeatMode = { viewModel.cycleRepeatMode() },
-                    onCyclePlaybackSpeed = { viewModel.cyclePlaybackSpeed() }
+                    onCyclePlaybackSpeed = { viewModel.cyclePlaybackSpeed() },
+                    onToggleTheme = { viewModel.toggleTheme() },
+                    onBookmarkTap = { viewModel.onBookmarkTap() },
+                    onSaveBookmark = { positionMs, note -> viewModel.saveBookmark(positionMs, note) },
+                    onDismissBookmarkDialog = { viewModel.dismissBookmarkDialog() },
+                    onSeekToTimestamp = { positionMs -> viewModel.seekToTimestamp(positionMs) },
+                    onDeleteTimestamp = { id -> viewModel.deleteBookmark(id) }
                 )
             }
         }
@@ -163,6 +199,12 @@ fun AudioPlayerScreen(
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
     onCyclePlaybackSpeed: () -> Unit,
+    onToggleTheme: () -> Unit,
+    onBookmarkTap: () -> Unit,
+    onSaveBookmark: (Long, String?) -> Unit,
+    onDismissBookmarkDialog: () -> Unit,
+    onSeekToTimestamp: (Long) -> Unit,
+    onDeleteTimestamp: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentTrack = uiState.tracks.getOrNull(uiState.currentTrackIndex)
@@ -190,6 +232,12 @@ fun AudioPlayerScreen(
                         )
                     },
                     actions = {
+                        IconButton(onClick = onToggleTheme) {
+                            Icon(
+                                imageVector = if (uiState.isNightMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                                contentDescription = if (uiState.isNightMode) "Switch to Light mode" else "Switch to Night mode"
+                            )
+                        }
                         IconButton(onClick = onChooseFolder) {
                             Icon(
                                 imageVector = Icons.Rounded.FolderOpen,
@@ -247,6 +295,14 @@ fun AudioPlayerScreen(
                     modifier = Modifier.weight(1f)
                 )
 
+                if (uiState.timestamps.isNotEmpty()) {
+                    TimestampListSection(
+                        timestamps = uiState.timestamps,
+                        onSeekToTimestamp = onSeekToTimestamp,
+                        onDeleteTimestamp = onDeleteTimestamp
+                    )
+                }
+
                 PlaybackControls(
                     isPlaying = uiState.isPlaying,
                     hasTracks = hasTracks,
@@ -263,8 +319,17 @@ fun AudioPlayerScreen(
                     onSeekTo = onSeekTo,
                     onToggleShuffle = onToggleShuffle,
                     onCycleRepeatMode = onCycleRepeatMode,
-                    onCyclePlaybackSpeed = onCyclePlaybackSpeed
+                    onCyclePlaybackSpeed = onCyclePlaybackSpeed,
+                    onBookmarkTap = onBookmarkTap
                 )
+
+                if (uiState.bookmarkDialogPositionMs != null) {
+                    BookmarkDialog(
+                        positionMs = uiState.bookmarkDialogPositionMs,
+                        onSave = onSaveBookmark,
+                        onDismiss = onDismissBookmarkDialog
+                    )
+                }
             }
         }
     }
@@ -614,7 +679,8 @@ private fun PlaybackControls(
     onSeekTo: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
-    onCyclePlaybackSpeed: () -> Unit
+    onCyclePlaybackSpeed: () -> Unit,
+    onBookmarkTap: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val safeDuration = duration.takeIf { it > 0L } ?: 0L
@@ -753,6 +819,18 @@ private fun PlaybackControls(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = speedLabel)
                 }
+
+                FilledTonalIconButton(
+                    onClick = {
+                        if (hasTracks) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onBookmarkTap()
+                        }
+                    },
+                    enabled = hasTracks
+                ) {
+                    Icon(imageVector = Icons.Rounded.BookmarkAdd, contentDescription = "Add bookmark")
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -799,6 +877,102 @@ private fun PlaybackControls(
                     }
                 }, enabled = hasTracks) {
                     Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookmarkDialog(
+    positionMs: Long,
+    onSave: (Long, String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var noteText by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Add Bookmark") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Position: ${formatTimestamp(positionMs)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    label = { Text("Note (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(positionMs, noteText.takeIf { it.isNotBlank() })
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun TimestampListSection(
+    timestamps: List<TimestampBookmark>,
+    onSeekToTimestamp: (Long) -> Unit,
+    onDeleteTimestamp: (Long) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Bookmarks",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        timestamps.forEach { bookmark ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = formatTimestamp(bookmark.positionMs),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { onSeekToTimestamp(bookmark.positionMs) }
+                )
+                if (bookmark.note != null) {
+                    Text(
+                        text = bookmark.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                IconButton(onClick = { onDeleteTimestamp(bookmark.id) }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Delete,
+                        contentDescription = "Delete bookmark",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -892,7 +1066,7 @@ private fun formatFileSize(sizeBytes: Long): String? {
 @Preview(showBackground = true)
 @Composable
 private fun AudioPlayerScreenPreview() {
-    AudioplayerTheme {
+    AudioplayerTheme(isNightMode = true) {
         AudioPlayerScreen(
             uiState = PlayerUiState(
                 folderUri = Uri.parse("content://demo/music"),
@@ -940,7 +1114,13 @@ private fun AudioPlayerScreenPreview() {
             onSeekTo = {},
             onToggleShuffle = {},
             onCycleRepeatMode = {},
-            onCyclePlaybackSpeed = {}
+            onCyclePlaybackSpeed = {},
+            onToggleTheme = {},
+            onBookmarkTap = {},
+            onSaveBookmark = { _, _ -> },
+            onDismissBookmarkDialog = {},
+            onSeekToTimestamp = {},
+            onDeleteTimestamp = {}
         )
     }
 }

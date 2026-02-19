@@ -17,6 +17,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +51,10 @@ data class PlayerUiState(
     val duration: Long = 0L,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val playbackSpeed: Float = 1f
+    val playbackSpeed: Float = 1f,
+    val isNightMode: Boolean = true,
+    val timestamps: List<TimestampBookmark> = emptyList(),
+    val bookmarkDialogPositionMs: Long? = null
 )
 
 class AudioPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -56,20 +65,23 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val player: ExoPlayer = playerManager.player
     private val mediaSession = playerManager.mediaSession
     private var progressJob: Job? = null
+    private val timestampDao = TimestampDatabase.getInstance(applicationContext).timestampDao()
+
+    private val _uiState = MutableStateFlow(PlayerUiState())
+    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             val savedPreferences = runCatching { preferences.getPreferences() }.getOrNull()
-                ?: return@launch
-            val folderUriString = savedPreferences.folderUri ?: return@launch
+            if (savedPreferences != null) {
+                _uiState.update { state -> state.copy(isNightMode = savedPreferences.isNightMode) }
+            }
+            val folderUriString = savedPreferences?.folderUri ?: return@launch
             val folderUri = runCatching { Uri.parse(folderUriString) }.getOrNull()
                 ?: return@launch
             restorePlaylist(folderUri, savedPreferences)
         }
     }
-
-    private val _uiState = MutableStateFlow(PlayerUiState())
-    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private val playerListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -121,7 +133,36 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     init {
-        player.addListener(playerListener)
+        @OptIn(ExperimentalCoroutinesApi::class)
+        viewModelScope.launch {
+            _uiState
+                .map { state ->
+                    val track = state.tracks.getOrNull(state.currentTrackIndex)
+                    val audioFileUri = track?.uri?.toString()
+                    val folderUri = state.folderUri?.toString()
+                    if (audioFileUri != null && folderUri != null) audioFileUri to folderUri else null
+                }
+                .distinctUntilChanged()
+                .flatMapLatest { pair ->
+                    if (pair != null) {
+                        timestampDao.getBookmarksForTrack(pair.first, pair.second)
+                    } else {
+                        flowOf(emptyList())
+                    }
+                }
+                .collectLatest { bookmarks ->
+                    _uiState.update { state -> state.copy(timestamps = bookmarks) }
+                }
+        }
+    }
+
+    fun toggleTheme() {
+        val newValue = !_uiState.value.isNightMode
+        _uiState.update { state -> state.copy(isNightMode = newValue) }
+        viewModelScope.launch {
+            runCatching { preferences.saveThemeMode(newValue) }
+                .onFailure { android.util.Log.w("AudioPlayerViewModel", "Failed to persist theme preference", it) }
+        }
     }
 
     fun onFolderSelected(folderUri: Uri) {
@@ -247,6 +288,46 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         player.seekTo(safePosition)
         updateProgressState()
         persistCurrentState()
+    }
+
+    fun onBookmarkTap() {
+        val positionMs = player.currentPosition
+        _uiState.update { it.copy(bookmarkDialogPositionMs = positionMs) }
+    }
+
+    fun saveBookmark(positionMs: Long, note: String?) {
+        val state = _uiState.value
+        val track = state.tracks.getOrNull(state.currentTrackIndex) ?: return
+        val folderUri = state.folderUri?.toString() ?: return
+        viewModelScope.launch {
+            timestampDao.insert(
+                TimestampBookmark(
+                    audioFileUri = track.uri.toString(),
+                    folderUri = folderUri,
+                    positionMs = positionMs,
+                    note = note?.takeIf { it.isNotBlank() }
+                )
+            )
+            _uiState.update { it.copy(bookmarkDialogPositionMs = null) }
+        }
+    }
+
+    fun dismissBookmarkDialog() {
+        _uiState.update { it.copy(bookmarkDialogPositionMs = null) }
+    }
+
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch {
+            timestampDao.deleteById(id)
+        }
+    }
+
+    fun seekToTimestamp(positionMs: Long) {
+        player.seekTo(positionMs)
+        if (!player.isPlaying) {
+            startPlayback()
+        }
+        updateProgressState()
     }
 
     private suspend fun restorePlaylist(folderUri: Uri, preferencesData: PlayerPreferencesData) {
