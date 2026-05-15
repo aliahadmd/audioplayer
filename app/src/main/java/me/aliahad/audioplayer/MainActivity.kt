@@ -87,7 +87,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -216,14 +215,15 @@ fun AudioPlayerScreen(
     val hasTracks = uiState.tracks.isNotEmpty()
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-            MaterialTheme.colorScheme.surface
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            MaterialTheme.colorScheme.background
         )
     )
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .background(backgroundBrush)
     ) {
         Scaffold(
@@ -687,57 +687,477 @@ private fun PlaybackControls(
     onCyclePlaybackSpeed: () -> Unit,
     onBookmarkTap: () -> Unit
 ) {
+    var controlsExpanded by rememberSaveable { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            PlaybackControlHeader(
+                currentPosition = currentPosition,
+                duration = duration,
+                isExpanded = controlsExpanded,
+                onToggleExpanded = { controlsExpanded = !controlsExpanded }
+            )
+
+            AnimatedVisibility(
+                visible = !controlsExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                MiniPlaybackProgress(
+                    currentPosition = currentPosition,
+                    bufferedPosition = bufferedPosition,
+                    duration = duration
+                )
+            }
+
+            AnimatedVisibility(
+                visible = controlsExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                PlaybackProgressScrubber(
+                    currentPosition = currentPosition,
+                    bufferedPosition = bufferedPosition,
+                    duration = duration,
+                    hasTracks = hasTracks,
+                    onSeekTo = onSeekTo,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+            }
+
+            TransportControls(
+                isPlaying = isPlaying,
+                hasTracks = hasTracks,
+                showStop = controlsExpanded,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                onPrevious = onPrevious,
+                onStop = onStop
+            )
+
+            AnimatedVisibility(
+                visible = controlsExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                SecondaryPlaybackControls(
+                    hasTracks = hasTracks,
+                    isShuffleEnabled = isShuffleEnabled,
+                    repeatMode = repeatMode,
+                    playbackSpeed = playbackSpeed,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeatMode = onCycleRepeatMode,
+                    onCyclePlaybackSpeed = onCyclePlaybackSpeed,
+                    onBookmarkTap = onBookmarkTap
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackControlHeader(
+    currentPosition: Long,
+    duration: Long,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit
+) {
+    val safeDuration = duration.takeIf { it > 0L } ?: 0L
+    val timeLabel = if (safeDuration > 0L) {
+        "${formatTime(currentPosition.coerceIn(0L, safeDuration))} / ${formatTime(safeDuration)}"
+    } else {
+        "${formatTime(currentPosition.coerceAtLeast(0L))} / --:--"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 10.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.GraphicEq,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = timeLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        IconButton(onClick = onToggleExpanded) {
+            Icon(
+                imageVector = if (isExpanded) Icons.Rounded.ExpandMore else Icons.Rounded.ExpandLess,
+                contentDescription = if (isExpanded) "Minimize controls" else "Maximize controls",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransportControls(
+    isPlaying: Boolean,
+    hasTracks: Boolean,
+    showStop: Boolean,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onStop: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val controlSize = if (showStop) 48.dp else 44.dp
+    val playSize = if (showStop) 56.dp else 52.dp
+    val playIconSize = if (showStop) 28.dp else 26.dp
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, bottom = if (showStop) 0.dp else 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalIconButton(
+                onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPrevious()
+                    }
+                },
+                enabled = hasTracks,
+                modifier = Modifier.size(controlSize)
+            ) {
+                Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = "Previous")
+            }
+            FilledIconButton(
+                onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPlayPause()
+                    }
+                },
+                enabled = hasTracks,
+                modifier = Modifier.size(playSize),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    modifier = Modifier.size(playIconSize)
+                )
+            }
+            FilledTonalIconButton(
+                onClick = {
+                    if (hasTracks) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onNext()
+                    }
+                },
+                enabled = hasTracks,
+                modifier = Modifier.size(controlSize)
+            ) {
+                Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = "Next")
+            }
+            if (showStop) {
+                FilledTonalIconButton(
+                    onClick = {
+                        if (hasTracks) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onStop()
+                        }
+                    },
+                    enabled = hasTracks,
+                    modifier = Modifier.size(controlSize)
+                ) {
+                    Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecondaryPlaybackControls(
+    hasTracks: Boolean,
+    isShuffleEnabled: Boolean,
+    repeatMode: Int,
+    playbackSpeed: Float,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackSpeed: () -> Unit,
+    onBookmarkTap: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val shuffleColors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = if (isShuffleEnabled) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            contentColor = if (isShuffleEnabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+        FilledTonalIconButton(
+            onClick = {
+                if (hasTracks) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleShuffle()
+                }
+            },
+            enabled = hasTracks,
+            colors = shuffleColors,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(imageVector = Icons.Rounded.Shuffle, contentDescription = "Toggle shuffle")
+        }
+
+        val repeatSelected = repeatMode != Player.REPEAT_MODE_OFF
+        val repeatColors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = if (repeatSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            contentColor = if (repeatSelected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+        val repeatIcon = when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
+            else -> Icons.Rounded.Repeat
+        }
+        FilledTonalIconButton(
+            onClick = {
+                if (hasTracks) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCycleRepeatMode()
+                }
+            },
+            enabled = hasTracks,
+            colors = repeatColors,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(imageVector = repeatIcon, contentDescription = "Cycle repeat mode")
+        }
+
+        val speedLabel = String.format(Locale.getDefault(), "%.1fx", playbackSpeed)
+        TextButton(
+            onClick = {
+                if (hasTracks) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCyclePlaybackSpeed()
+                }
+            },
+            enabled = hasTracks
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Speed,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = speedLabel)
+        }
+
+        FilledTonalIconButton(
+            onClick = {
+                if (hasTracks) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onBookmarkTap()
+                }
+            },
+            enabled = hasTracks,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(imageVector = Icons.Rounded.BookmarkAdd, contentDescription = "Add bookmark")
+        }
+    }
+}
+
+@Composable
+private fun MiniPlaybackProgress(
+    currentPosition: Long,
+    bufferedPosition: Long,
+    duration: Long
+) {
+    val safeDuration = duration.takeIf { it > 0L } ?: 0L
+    val playedFraction = progressFraction(currentPosition, safeDuration)
+    val bufferedFraction = progressFraction(maxOf(bufferedPosition, currentPosition), safeDuration)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .height(8.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(bufferedFraction)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(playedFraction)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+        )
+    }
+}
+
+@Composable
+private fun PlaybackProgressScrubber(
+    currentPosition: Long,
+    bufferedPosition: Long,
+    duration: Long,
+    hasTracks: Boolean,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val haptic = LocalHapticFeedback.current
     val safeDuration = duration.takeIf { it > 0L } ?: 0L
     val sliderRange = if (safeDuration > 0L) safeDuration.toFloat() else 1f
     var sliderPosition by remember(safeDuration, hasTracks) {
-        mutableStateOf(currentPosition.coerceIn(0L, safeDuration).toFloat())
+        mutableStateOf(currentPosition.coerceForSlider(safeDuration).toFloat())
     }
     var isScrubbing by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentPosition, safeDuration, hasTracks) {
         if (!isScrubbing) {
-            sliderPosition = currentPosition.coerceIn(0L, safeDuration).toFloat()
+            sliderPosition = currentPosition.coerceForSlider(safeDuration).toFloat()
         }
     }
 
+    val displayPosition = if (isScrubbing) {
+        sliderPosition.toLong()
+    } else {
+        currentPosition.coerceAtLeast(0L)
+    }
+    val playedFraction = progressFraction(
+        position = if (isScrubbing) sliderPosition.toLong() else currentPosition,
+        duration = safeDuration
+    )
+    val bufferedFraction = progressFraction(
+        position = maxOf(bufferedPosition, currentPosition),
+        duration = safeDuration
+    )
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
+    val bufferedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Slider(
-            value = sliderPosition,
-            onValueChange = { value ->
-                if (hasTracks && safeDuration > 0L) {
-                    if (!isScrubbing) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-                    isScrubbing = true
-                    sliderPosition = value.coerceIn(0f, sliderRange)
-                }
-            },
-            onValueChangeFinished = {
-                isScrubbing = false
-                if (hasTracks && safeDuration > 0L) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onSeekTo(sliderPosition.toLong())
-                }
-            },
-            enabled = hasTracks,
-            valueRange = 0f..sliderRange,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(CircleShape)
+                    .background(trackColor)
             )
-        )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(bufferedFraction)
+                    .height(8.dp)
+                    .align(Alignment.CenterStart)
+                    .clip(CircleShape)
+                    .background(bufferedColor)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(playedFraction)
+                    .height(8.dp)
+                    .align(Alignment.CenterStart)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Slider(
+                value = sliderPosition,
+                onValueChange = { value ->
+                    if (hasTracks && safeDuration > 0L) {
+                        if (!isScrubbing) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        isScrubbing = true
+                        sliderPosition = value.coerceIn(0f, sliderRange)
+                    }
+                },
+                onValueChangeFinished = {
+                    isScrubbing = false
+                    if (hasTracks && safeDuration > 0L) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSeekTo(sliderPosition.toLong())
+                    }
+                },
+                enabled = hasTracks && safeDuration > 0L,
+                valueRange = 0f..sliderRange,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent,
+                    disabledActiveTrackColor = Color.Transparent,
+                    disabledInactiveTrackColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = formatTime(sliderPosition.toLong()),
+                text = formatTime(displayPosition),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -747,146 +1167,18 @@ private fun PlaybackControls(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val shuffleColors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (isShuffleEnabled) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    contentColor = if (isShuffleEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                FilledTonalIconButton(
-                    onClick = {
-                        if (hasTracks) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onToggleShuffle()
-                        }
-                    },
-                    enabled = hasTracks,
-                    colors = shuffleColors
-                ) {
-                    Icon(imageVector = Icons.Rounded.Shuffle, contentDescription = "Toggle shuffle")
-                }
-
-                val repeatSelected = repeatMode != Player.REPEAT_MODE_OFF
-                val repeatColors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (repeatSelected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    contentColor = if (repeatSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                val repeatIcon = when (repeatMode) {
-                    Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
-                    else -> Icons.Rounded.Repeat
-                }
-                FilledTonalIconButton(
-                    onClick = {
-                        if (hasTracks) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onCycleRepeatMode()
-                        }
-                    },
-                    enabled = hasTracks,
-                    colors = repeatColors
-                ) {
-                    Icon(imageVector = repeatIcon, contentDescription = "Cycle repeat mode")
-                }
-
-                val speedLabel = String.format(Locale.getDefault(), "%.1fx", playbackSpeed)
-                TextButton(onClick = {
-                    if (hasTracks) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCyclePlaybackSpeed()
-                    }
-                }, enabled = hasTracks) {
-                    Icon(
-                        imageVector = Icons.Rounded.Speed,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = speedLabel)
-                }
-
-                FilledTonalIconButton(
-                    onClick = {
-                        if (hasTracks) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onBookmarkTap()
-                        }
-                    },
-                    enabled = hasTracks
-                ) {
-                    Icon(imageVector = Icons.Rounded.BookmarkAdd, contentDescription = "Add bookmark")
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalIconButton(onClick = {
-                    if (hasTracks) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPrevious()
-                    }
-                }, enabled = hasTracks) {
-                    Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = "Previous")
-                }
-                FilledIconButton(
-                    onClick = {
-                        if (hasTracks) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onPlayPause()
-                        }
-                    },
-                    enabled = hasTracks,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play"
-                    )
-                }
-                FilledTonalIconButton(onClick = {
-                    if (hasTracks) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onNext()
-                    }
-                }, enabled = hasTracks) {
-                    Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = "Next")
-                }
-                FilledTonalIconButton(onClick = {
-                    if (hasTracks) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onStop()
-                    }
-                }, enabled = hasTracks) {
-                    Icon(imageVector = Icons.Rounded.Stop, contentDescription = "Stop")
-                }
-            }
-        }
     }
 }
+
+private fun Long.coerceForSlider(duration: Long): Long =
+    if (duration > 0L) coerceIn(0L, duration) else 0L
+
+private fun progressFraction(position: Long, duration: Long): Float =
+    if (duration > 0L) {
+        (position.coerceIn(0L, duration).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
 
 @Composable
 private fun BookmarkDialog(

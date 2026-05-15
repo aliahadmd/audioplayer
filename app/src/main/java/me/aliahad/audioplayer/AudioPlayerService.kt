@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -15,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.PlayerNotificationManager
 
+@androidx.annotation.OptIn(UnstableApi::class)
 class AudioPlayerService : android.app.Service() {
 
     private lateinit var playerNotificationManager: PlayerNotificationManager
@@ -36,17 +36,13 @@ class AudioPlayerService : android.app.Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP && !player.playWhenReady) {
-            stopForegroundService()
-        } else {
-            playerNotificationManager.invalidate()
-        }
+        playerNotificationManager.invalidate()
         return START_STICKY
     }
 
     override fun onDestroy() {
         playerNotificationManager.setPlayer(null)
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 
@@ -150,15 +146,13 @@ class AudioPlayerService : android.app.Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            getString(R.string.notification_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
     }
 
     private fun stopForegroundService() {
@@ -170,7 +164,6 @@ class AudioPlayerService : android.app.Service() {
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_CHANNEL_ID = "audio_playback_channel"
-        private const val ACTION_STOP = "me.aliahad.audioplayer.action.STOP"
 
         fun startService(context: Context) {
             val intent = Intent(context, AudioPlayerService::class.java)
@@ -178,8 +171,8 @@ class AudioPlayerService : android.app.Service() {
         }
 
         fun stopService(context: Context) {
-            val intent = Intent(context, AudioPlayerService::class.java).apply { action = ACTION_STOP }
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(context, AudioPlayerService::class.java)
+            context.stopService(intent)
         }
     }
 }

@@ -74,6 +74,17 @@ class PlayerPreferences(context: Context) {
         dataStore.edit { it.clear() }
     }
 
+    suspend fun clearPlaybackState() {
+        dataStore.edit { preferences ->
+            preferences.remove(FOLDER_URI_KEY)
+            preferences.remove(CURRENT_TRACK_URI_KEY)
+            preferences.remove(POSITION_MS_KEY)
+            preferences.remove(SHUFFLE_ENABLED_KEY)
+            preferences.remove(REPEAT_MODE_KEY)
+            preferences.remove(PLAYBACK_SPEED_KEY)
+        }
+    }
+
     suspend fun saveThemeMode(isNightMode: Boolean) {
         dataStore.edit { preferences ->
             preferences[IS_NIGHT_MODE_KEY] = isNightMode

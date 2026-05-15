@@ -6,7 +6,6 @@ import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.long
 import io.kotest.property.arbitrary.map
-import io.kotest.property.arbitrary.orNull
 import io.kotest.property.arbitrary.string
 import io.kotest.property.assume
 import io.kotest.property.forAll
@@ -77,16 +76,10 @@ class TimestampBookmarkPropertyTest : FunSpec({
                 it.audioFileUri == audioUri2 && it.folderUri == folderUri2
             }
 
-            // Filtering by pair1 must never contain pair2 bookmarks
-            val pair1ContainsNoPair2 = filteredForPair1.none {
-                it.audioFileUri == audioUri2 && it.folderUri == folderUri2
-            }
-            // Filtering by pair2 must never contain pair1 bookmarks
-            val pair2ContainsNoPair1 = filteredForPair2.none {
-                it.audioFileUri == audioUri1 && it.folderUri == folderUri1
-            }
-
-            pair1ContainsNoPair2 && pair2ContainsNoPair1
+            filteredForPair1.all { it.audioFileUri == audioUri1 && it.folderUri == folderUri1 } &&
+                filteredForPair2.all { it.audioFileUri == audioUri2 && it.folderUri == folderUri2 } &&
+                filteredForPair1.map { it.positionMs }.sorted() == positions1.sorted() &&
+                filteredForPair2.map { it.positionMs }.sorted() == positions2.sorted()
         }
     }
 
@@ -108,23 +101,23 @@ class TimestampBookmarkPropertyTest : FunSpec({
 
         forAll(Arb.list(arbAction, 1..50)) { actions ->
             var bookmarkDialogPositionMs: Long? = null
-
-            actions.all { action ->
+            val expectedFinalPosition = actions.fold(null as Long?) { _, action ->
                 when (action) {
-                    is DialogAction.Tap -> {
-                        bookmarkDialogPositionMs = action.positionMs
-                        bookmarkDialogPositionMs != null
-                    }
-                    is DialogAction.Dismiss -> {
-                        bookmarkDialogPositionMs = null
-                        bookmarkDialogPositionMs == null
-                    }
-                    is DialogAction.Save -> {
-                        bookmarkDialogPositionMs = null
-                        bookmarkDialogPositionMs == null
-                    }
+                    is DialogAction.Tap -> action.positionMs
+                    is DialogAction.Dismiss,
+                    is DialogAction.Save -> null
                 }
             }
+
+            actions.forEach { action ->
+                when (action) {
+                    is DialogAction.Tap -> bookmarkDialogPositionMs = action.positionMs
+                    is DialogAction.Dismiss,
+                    is DialogAction.Save -> bookmarkDialogPositionMs = null
+                }
+            }
+
+            bookmarkDialogPositionMs == expectedFinalPosition
         }
     }
 })

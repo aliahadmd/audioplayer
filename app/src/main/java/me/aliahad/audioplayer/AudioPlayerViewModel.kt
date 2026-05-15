@@ -11,6 +11,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -185,7 +186,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         errorMessage = "No audio files found in selected folder."
                     )
                 }
-                preferences.clear()
+                preferences.clearPlaybackState()
                 AudioPlayerService.stopService(applicationContext)
                 return@launch
             } else {
@@ -339,7 +340,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         if (tracks.isEmpty()) {
             clearPlaylist()
-            preferences.clear()
+            preferences.clearPlaybackState()
             _uiState.update { state ->
                 state.copy(
                     folderUri = folderUri,
@@ -465,6 +466,7 @@ class AudioPlayerViewModel(application: Application) : AndroidViewModel(applicat
         return extension in SUPPORTED_AUDIO_EXTENSIONS
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     private fun setPlaylist(folderUri: Uri, tracks: List<AudioTrack>, startIndex: Int = 0) {
         player.stop()
         player.clearMediaItems()

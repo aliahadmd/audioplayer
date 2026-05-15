@@ -25,4 +25,11 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 - DataStore (for preferences)
 - Android 12+ compatible (min SDK 31)
 
+## Release Signing
+Release signing is configured outside the repository. Set these Gradle properties or environment variables before building a signed release:
+
+- `AUDIOPLAYER_RELEASE_STORE_FILE`
+- `AUDIOPLAYER_RELEASE_STORE_PASSWORD`
+- `AUDIOPLAYER_RELEASE_KEY_ALIAS`
+- `AUDIOPLAYER_RELEASE_KEY_PASSWORD`
 
