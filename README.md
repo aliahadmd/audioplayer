@@ -19,6 +19,14 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 | --- | --- |
 | ![Notification & lockscreen controls](screenshot/4.jpg) | ![Folder selection flow](screenshot/5.jpg) |
 
+|  | |  |
+| --- | --- | --- |
+| ![Audio player screenshot 6](screenshot/6.jpg) | ![Audio player screenshot 7](screenshot/7.jpg) | ![Audio player screenshot 8](screenshot/8.jpg) |
+
+|  | |  |
+| --- | --- | --- |
+| ![Audio player screenshot 9](screenshot/9.jpg) | ![Audio player screenshot 10](screenshot/10.jpg) | ![Audio player screenshot 11](screenshot/11.jpg) |
+
 ## Tech Stack
 - Kotlin + Jetpack Compose
 - Media3 ExoPlayer & MediaSession
@@ -32,4 +40,3 @@ Release signing is configured outside the repository. Set these Gradle propertie
 - `AUDIOPLAYER_RELEASE_STORE_PASSWORD`
 - `AUDIOPLAYER_RELEASE_KEY_ALIAS`
 - `AUDIOPLAYER_RELEASE_KEY_PASSWORD`
-
