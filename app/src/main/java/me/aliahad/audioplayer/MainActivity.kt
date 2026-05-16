@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -232,7 +233,7 @@ fun AudioPlayerScreen(
                 CenterAlignedTopAppBar(
                     title = {
                         Text(
-                            text = "Audio Player",
+                            text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.titleLarge
                         )
                     },

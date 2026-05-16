@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">audioplayer</string>
+    <string name="app_name">SoundVault</string>
     <string name="notification_channel_name">Audio playback</string>
 </resources>

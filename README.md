@@ -1,4 +1,4 @@
-# Audio Player for Android
+# SoundVault for Android
 
 A polished audio playback app tailored for my personal library. I wanted something modern, reliable, and beautiful to use every day, so this project focuses on the practical features I care about most.
 
@@ -21,11 +21,11 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 
 |  | |  |
 | --- | --- | --- |
-| ![Audio player screenshot 6](screenshot/6.jpg) | ![Audio player screenshot 7](screenshot/7.jpg) | ![Audio player screenshot 8](screenshot/8.jpg) |
+| ![SoundVault screenshot 6](screenshot/6.jpg) | ![SoundVault screenshot 7](screenshot/7.jpg) | ![SoundVault screenshot 8](screenshot/8.jpg) |
 
 |  | |  |
 | --- | --- | --- |
-| ![Audio player screenshot 9](screenshot/9.jpg) | ![Audio player screenshot 10](screenshot/10.jpg) | ![Audio player screenshot 11](screenshot/11.jpg) |
+| ![SoundVault screenshot 9](screenshot/9.jpg) | ![SoundVault screenshot 10](screenshot/10.jpg) | ![SoundVault screenshot 11](screenshot/11.jpg) |
 
 ## Tech Stack
 - Kotlin + Jetpack Compose
@@ -36,7 +36,7 @@ A polished audio playback app tailored for my personal library. I wanted somethi
 ## Release Signing
 Release signing is configured outside the repository. Set these Gradle properties or environment variables before building a signed release:
 
-- `AUDIOPLAYER_RELEASE_STORE_FILE`
-- `AUDIOPLAYER_RELEASE_STORE_PASSWORD`
-- `AUDIOPLAYER_RELEASE_KEY_ALIAS`
-- `AUDIOPLAYER_RELEASE_KEY_PASSWORD`
+- `SOUNDVAULT_RELEASE_STORE_FILE`
+- `SOUNDVAULT_RELEASE_STORE_PASSWORD`
+- `SOUNDVAULT_RELEASE_KEY_ALIAS`
+- `SOUNDVAULT_RELEASE_KEY_PASSWORD`

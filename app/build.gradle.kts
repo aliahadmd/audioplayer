@@ -5,17 +5,17 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val releaseStoreFile = providers.gradleProperty("AUDIOPLAYER_RELEASE_STORE_FILE")
-    .orElse(providers.environmentVariable("AUDIOPLAYER_RELEASE_STORE_FILE"))
+val releaseStoreFile = providers.gradleProperty("SOUNDVAULT_RELEASE_STORE_FILE")
+    .orElse(providers.environmentVariable("SOUNDVAULT_RELEASE_STORE_FILE"))
     .orNull
-val releaseStorePassword = providers.gradleProperty("AUDIOPLAYER_RELEASE_STORE_PASSWORD")
-    .orElse(providers.environmentVariable("AUDIOPLAYER_RELEASE_STORE_PASSWORD"))
+val releaseStorePassword = providers.gradleProperty("SOUNDVAULT_RELEASE_STORE_PASSWORD")
+    .orElse(providers.environmentVariable("SOUNDVAULT_RELEASE_STORE_PASSWORD"))
     .orNull
-val releaseKeyAlias = providers.gradleProperty("AUDIOPLAYER_RELEASE_KEY_ALIAS")
-    .orElse(providers.environmentVariable("AUDIOPLAYER_RELEASE_KEY_ALIAS"))
+val releaseKeyAlias = providers.gradleProperty("SOUNDVAULT_RELEASE_KEY_ALIAS")
+    .orElse(providers.environmentVariable("SOUNDVAULT_RELEASE_KEY_ALIAS"))
     .orNull
-val releaseKeyPassword = providers.gradleProperty("AUDIOPLAYER_RELEASE_KEY_PASSWORD")
-    .orElse(providers.environmentVariable("AUDIOPLAYER_RELEASE_KEY_PASSWORD"))
+val releaseKeyPassword = providers.gradleProperty("SOUNDVAULT_RELEASE_KEY_PASSWORD")
+    .orElse(providers.environmentVariable("SOUNDVAULT_RELEASE_KEY_PASSWORD"))
     .orNull
 val releaseSigningConfigured = listOf(
     releaseStoreFile,
@@ -45,8 +45,8 @@ android {
         applicationId = "me.aliahad.audioplayer"
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.0.2"
+        versionCode = 3
+        versionName = "0.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

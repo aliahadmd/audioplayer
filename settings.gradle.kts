@@ -22,6 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "audioplayer"
+rootProject.name = "SoundVault"
 include(":app")
- 
